@@ -4,8 +4,6 @@ import { contractABI } from './constants/contractABI';
 import { contractAddress } from './constants/contractAddress';
 import Web3 from 'web3';
 
-import { TextField, Button, Box, Grid, Typography, Snackbar, Alert } from '@mui/material';
-
 const App = () => {
   const [web3, setWeb3] = useState(null);
   const [contract, setContract] = useState(null);
@@ -17,8 +15,6 @@ const App = () => {
   const [contractBalance, setContractBalance] = useState('');
   const [bidAmount, setBidAmount] = useState('0.01');
   const [winningItems, setWinningItems] = useState('');
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   useEffect(() => {
     const init = async () => {
@@ -44,8 +40,10 @@ const App = () => {
     init();
   }, []);
 
-  const fetchBidCountsAndBalance = async (instance) => {
+  // This function is now explicitly called after a bid is placed to update the UI
+  const fetchBidCountsAndBalance = async () => {
     try {
+      const instance = contract; // Use the already set contract instance
       const carBidCount = await instance.methods.bidCount(1).call();
       const phoneBidCount = await instance.methods.bidCount(2).call();
       const computerBidCount = await instance.methods.bidCount(3).call();
@@ -58,24 +56,25 @@ const App = () => {
     }
   };
 
+  // Transfer Ownership function remains the same
   const transferOwnership = async () => {
     try {
       await contract.methods.transferOwnership(newOwnerAddress).send({ from: account });
-      setSnackbarMessage("Ownership has been transferred.");
-      setOpenSnackbar(true);
-      setNewOwnerAddress('');
+      alert("Ownership has been transferred.");
+      setNewOwnerAddress(''); // Reset new owner address field
     } catch (error) {
-      setSnackbarMessage(`Error transferring ownership: ${error.message}`);
-      setOpenSnackbar(true);
+      alert(`Error transferring ownership: ${error.message}`);
     }
   };
 
   const placeBid = async (itemId) => {
     const etherValue = Web3.utils.toWei(bidAmount, 'ether');
     try {
-      await contract.methods.bid(itemId).send({ from: account, value: etherValue });
-      fetchBidCountsAndBalance(contract);
-      alert('Bid placed successfully!');
+      await contract.methods.bid(itemId).send({ from: account, value: etherValue })
+        .on('receipt', () => {
+          alert('Bid placed successfully!');
+          fetchBidCountsAndBalance(); // Ensure state is updated after the transaction
+        });
     } catch (error) {
       alert(`Error placing bid: ${error.message}`);
     }
@@ -109,17 +108,18 @@ const App = () => {
       alert(`Error declaring winners: ${error.message}`);
     }
   };
-
+  
   const withdrawFunds = async () => {
     try {
       await contract.methods.withdraw().send({ from: account });
       alert("Funds withdrawn successfully.");
+      // Refresh the contract balance to show the updated amount
       await fetchBidCountsAndBalance(contract);
     } catch (error) {
       alert(`Error withdrawing funds: ${error.message}`);
     }
   };
-
+  
   const destructContract = async () => {
     try {
       await contract.methods.destructContract().send({ from: account });
@@ -134,73 +134,46 @@ const App = () => {
     try {
       await contract.methods.initiateNewCycle().send({ from: account });
       alert("Auction has been restarted for a new cycle.");
-      setBidCounts({ car: 0, phone: 0, computer: 0 });
-      setWinningItems('');
+      setBidCounts({ car: 0, phone: 0, computer: 0 }); // Reset bid counts
+      setWinningItems(''); // Clear winning items
     } catch (error) {
       alert(`Error initiating new cycle: ${error.message}`);
     }
   };
 
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setOpenSnackbar(false);
-  };
-
   return (
-    <Grid container spacing={2} direction="column" alignItems="center">
-      <Grid item xs={12}>
-        <Typography variant="h4" gutterBottom>Lottery DApp</Typography>
-      </Grid>
-      <Grid item xs={12}>
-        <p>Connected Account: {account}</p>
-        {isOwner && (
-          <>
-            <p>You are the owner of this contract.</p>
-            <Box sx={{ my: 2 }}>
-              <TextField
-                label="Enter new owner address"
-                variant="outlined"
-                value={newOwnerAddress}
-                onChange={(e) => setNewOwnerAddress(e.target.value)}
-                fullWidth
-                margin="normal"
-              />
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={transferOwnership}
-                disabled={!isOwner}
-                sx={{ mt: 1 }}
-              >
-                Transfer Ownership
-              </Button>
-            </Box>
-          </>
-        )}
-        <p>Contract Owner: {owner}</p>
-        <p>Total Bids for Car: {bidCounts.car}</p>
-        <p>Total Bids for Phone: {bidCounts.phone}</p>
-        <p>Total Bids for Computer: {bidCounts.computer}</p>
-        <p>Contract Balance: {contractBalance} ETH</p>
-        <Button variant="contained" color="primary" onClick={() => placeBid(1)} disabled={isOwner}>Bid on Car</Button>
-        <Button variant="contained" color="primary" onClick={() => placeBid(2)} disabled={isOwner}>Bid on Phone</Button>
-        <Button variant="contained" color="primary" onClick={() => placeBid(3)} disabled={isOwner}>Bid on Computer</Button>
-        <Button variant="contained" color="primary" onClick={checkIfWinner} disabled={isOwner}>Am I Winner?</Button>
-        {winningItems && <p>{winningItems}</p>}
-        <Button variant="contained" color="primary" onClick={declareWinners} disabled={!isOwner}>Declare Winners</Button>
-        <Button variant="contained" color="primary" onClick={withdrawFunds} disabled={!isOwner}>Withdraw Funds</Button>
-        <Button variant="contained" color="primary" onClick={destructContract} disabled={!isOwner}>Destroy Contract</Button>
-        <Button variant="contained" color="primary" onClick={initiateNewCycle} disabled={!isOwner}>Initiate New Cycle</Button>
-      </Grid>
-      <Snackbar open={openSnackbar} autoHideDuration={6000} onClose={handleSnackbarClose}>
-        <Alert onClose={handleSnackbarClose} severity="success" sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </Grid>
+    <div>
+      <h1>Lottery DApp</h1>
+      <p>Connected Account: {account}</p>
+      {isOwner && (
+        <>
+          <p>You are the owner of this contract.</p>
+          <input 
+            type="text" 
+            value={newOwnerAddress} 
+            onChange={(e) => setNewOwnerAddress(e.target.value)} 
+            placeholder="Enter new owner address" 
+          />
+          <button onClick={transferOwnership}>Transfer Ownership</button>
+        </>
+      )}
+      <p>Contract Owner: {owner}</p>
+      <p>Total Bids for Car: {bidCounts.car}</p>
+      <p>Total Bids for Phone: {bidCounts.phone}</p>
+      <p>Total Bids for Computer: {bidCounts.computer}</p>
+      <p>Contract Balance: {contractBalance} ETH</p>
+      <button onClick={() => placeBid(1)} disabled={isOwner}>Bid on Car</button>
+      <button onClick={() => placeBid(2)} disabled={isOwner}>Bid on Phone</button>
+      <button onClick={() => placeBid(3)} disabled={isOwner}>Bid on Computer</button>
+      <button onClick={checkIfWinner} disabled={isOwner}>Am I Winner?</button>
+      {winningItems && <p>{winningItems}</p>}
+      {/* Ensure buttons are always visible but disabled for non-owners */}
+      <button onClick={declareWinners} disabled={!isOwner}>Declare Winners</button>
+      <button onClick={withdrawFunds} disabled={!isOwner}>Withdraw Funds</button>
+      <button onClick={destructContract} disabled={!isOwner}>Destroy Contract</button>
+      <button onClick={initiateNewCycle} disabled={!isOwner}>Initiate New Cycle</button>
+    </div>
   );
-};
+}
 
 export default App;
